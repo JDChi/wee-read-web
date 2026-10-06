@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build release package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import json; print(json.load(open("extension/manifest.json", encoding="utf-8"))["version"])')"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "$tag_version" != "$version" ]]; then
+            echo "Tag version ($tag_version) does not match manifest version ($version)." >&2
+            exit 1
+          fi
+          package_path="$(sh scripts/package.sh)"
+          echo "path=$package_path" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: gh release create "$GITHUB_REF_NAME" "$PACKAGE_PATH" --title "wee-read-web $VERSION" --generate-notes
