@@ -1,7 +1,3 @@
-.wr-helper-history-host {
-  position: relative;
-}
-
 :root {
   --wr-helper-blue: #1b88ee;
   --wr-helper-blue-strong: #0d72d2;
@@ -14,11 +10,9 @@
 }
 
 .wr-helper-history {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
+  position: fixed;
   z-index: 10020;
+  box-sizing: border-box;
   overflow: hidden;
   border: 1px solid #e5e8ec;
   border-radius: 26px;

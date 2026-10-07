@@ -69,18 +69,29 @@
     const input = searchInput();
     const wrapper = input?.closest(SEARCH_WRAPPER);
     const host = wrapper?.parentElement;
-    if (!host) return null;
-    if (historyPanel?.parentElement !== host) {
-      historyPanel?.remove();
+    if (!host || !document.body) {
+      hideHistory();
+      return null;
+    }
+    if (!historyPanel) {
       historyPanel = document.createElement("div");
       historyPanel.className = "wr-helper-history";
       historyPanel.setAttribute("role", "group");
       historyPanel.setAttribute("aria-label", "最近搜索");
       historyPanel.hidden = true;
-      host.classList.add("wr-helper-history-host");
-      host.append(historyPanel);
     }
+    if (historyPanel.parentElement !== document.body) document.body.append(historyPanel);
     return historyPanel;
+  }
+
+  function positionHistoryPanel() {
+    if (!historyPanel || historyPanel.hidden) return;
+    const host = searchInput()?.closest(SEARCH_WRAPPER)?.parentElement;
+    if (!host) return hideHistory();
+    const rect = host.getBoundingClientRect();
+    historyPanel.style.top = `${rect.bottom + 8}px`;
+    historyPanel.style.left = `${rect.left}px`;
+    historyPanel.style.width = `${rect.width}px`;
   }
 
   function hideHistory() {
@@ -95,6 +106,7 @@
       document.activeElement === input && !normalizedTerm(input.value);
     if (panel.hidden === shouldShow) panel.hidden = !shouldShow;
     if (!shouldShow) return;
+    positionHistoryPanel();
 
     panel.replaceChildren();
     const header = document.createElement("div");
@@ -403,7 +415,11 @@
   document.addEventListener("pointerdown", (event) => {
     if (event.target !== searchInput() && !historyPanel?.contains(event.target)) hideHistory();
   });
-  window.addEventListener("resize", scheduleRender);
+  window.addEventListener("resize", () => {
+    positionHistoryPanel();
+    scheduleRender();
+  });
+  document.addEventListener("scroll", positionHistoryPanel, { capture: true, passive: true });
 
   historyLoad = chrome.storage.local.get(HISTORY_KEY).then((data) => {
     recentSearches = Array.isArray(data[HISTORY_KEY]) ? data[HISTORY_KEY].slice(0, HISTORY_LIMIT) : [];
