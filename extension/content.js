@@ -8,6 +8,8 @@
   const SEARCH_REQUEST_PATH = "/api/store/search";
   const RESULT_CARD = ".wr_search_content_card_content_item";
   const FULL_RESULT_CARD = ".search_bookDetail_list > .wr_bookList_item";
+  const HOME_SUGGESTION = ".wr_index_page_top_section_content_suggestions > a.wr_suggestion_card_wrapper";
+  const HOME_RANK_BOOK = ".wr_index_page_rank_list_card_content_info > a.wr_index_page_mini_bookInfo";
   const PREVIEW_ID = "wr-helper-book-preview";
   const PREVIEW_DELAY = 300;
   const PREVIEW_CLOSE_DELAY = 180;
@@ -269,11 +271,17 @@
   }
 
   function getPreviewTarget(element, pointer) {
-    const card = element.closest(`${RESULT_CARD}, ${FULL_RESULT_CARD}`);
+    const card = element.closest(`${RESULT_CARD}, ${FULL_RESULT_CARD}, ${HOME_SUGGESTION}, ${HOME_RANK_BOOK}`);
     if (!card) return null;
     const full = card.matches(FULL_RESULT_CARD);
-    const link = card.querySelector(full ? ".wr_bookList_item_link" : ".wr_index_page_mini_bookInfo");
-    const cover = card.querySelector(full ? ".wr_bookList_item_cover" : ".wr_index_page_mini_bookInfo_cover_wrapper");
+    const compactSearch = card.matches(RESULT_CARD);
+    const home = !full && !compactSearch;
+    if (home && location.pathname !== "/") return null;
+    const suggestion = home && card.matches(HOME_SUGGESTION);
+    const link = home ? card : card.querySelector(full ? ".wr_bookList_item_link" : ".wr_index_page_mini_bookInfo");
+    const coverSelector = full ? ".wr_bookList_item_cover"
+      : suggestion ? ".wr_suggestion_card_cover" : ".wr_index_page_mini_bookInfo_cover_wrapper";
+    const cover = card.querySelector(coverSelector);
     const url = previewBookUrl(link?.getAttribute("href"));
     if (!cover || !url) return null;
 
@@ -286,7 +294,8 @@
     }
 
     const token = url.pathname.split("/")[3];
-    return { card, cover, link, url, token, full, hover: Boolean(pointer), page: location.href };
+    const homePoint = home && pointer ? { clientX: pointer.clientX, clientY: pointer.clientY } : null;
+    return { card, cover, link, url, token, full, compactSearch, suggestion, homePoint, hover: Boolean(pointer), page: location.href };
   }
 
   function fetchBookDetails(url) {
@@ -507,9 +516,34 @@
       preview.link.isConnected && previewBookUrl(preview.link.getAttribute("href"))?.href === preview.url.href;
   }
 
+  function retryHomePreview(previous, attempts = 2) {
+    previewOpenTimer = setTimeout(() => {
+      previewOpenTimer = undefined;
+      if (hoveredPreview !== previous || previous.page !== location.href) return;
+      const point = previous.homePoint;
+      const element = document.elementFromPoint(point.clientX, point.clientY);
+      const replacement = element && getPreviewTarget(element, point);
+      if (replacement?.homePoint) {
+        hoveredPreview = replacement;
+        activePreview = replacement;
+        void showPreview(replacement);
+      } else if (attempts > 1) {
+        retryHomePreview(previous, attempts - 1);
+      }
+    }, PREVIEW_DELAY);
+  }
+
   function positionPreview() {
     if (!activePreview) return;
-    if (!previewIsCurrent(activePreview)) return closePreview();
+    if (!previewIsCurrent(activePreview)) {
+      const previous = activePreview;
+      closePreview();
+      if (hoveredPreview === previous && previous.homePoint && previous.page === location.href) {
+        // The homepage briefly leaves the cover position empty when replacing its cards.
+        retryHomePreview(previous);
+      }
+      return;
+    }
     if (previewPanel?.hidden !== false) return;
     const cover = activePreview.cover.getBoundingClientRect();
     const width = document.documentElement.clientWidth;
@@ -529,7 +563,8 @@
 
   function previewTitle(preview, info) {
     if (!preview.full && info?.title) return info.title;
-    const selector = preview.full ? ".wr_bookList_item_title" : ".wr_index_page_mini_bookInfo_content_title";
+    const selector = preview.full ? ".wr_bookList_item_title"
+      : preview.suggestion ? ".wr_suggestion_card_content_title" : ".wr_index_page_mini_bookInfo_content_title";
     const title = preview.card.querySelector(selector)?.cloneNode(true);
     title?.querySelector(".wr_index_page_mini_bookInfo_content_info_extra")?.remove();
     return title?.textContent.trim() || info?.title || "书籍简介";
@@ -545,16 +580,18 @@
   function updatePreviewTitle(event) {
     const titleRow = previewContent.firstElementChild;
     if (!titleRow) return;
-    const progress = Math.max(0, Math.min(1, event.currentTarget.scrollTop / 32));
-    titleRow.style.setProperty("--wr-helper-preview-title-progress", progress);
+    const scrollTop = Math.max(0, event.currentTarget.scrollTop);
+    const progress = Math.min(1, scrollTop / 32);
     titleRow.firstElementChild.style.setProperty("--wr-helper-preview-title-scale", 1 - 0.16 * progress);
+    titleRow.nextElementSibling.style.setProperty("--wr-helper-preview-scroll-top", `${scrollTop}px`);
   }
 
   function renderPreviewContent(preview, info, details, intro) {
     const titleRow = previewElement("div", "title-row");
     titleRow.append(previewElement("div", "title", previewTitle(preview, info)));
     const header = previewElement("div", "header");
-    const authorSelector = preview.full ? ".wr_bookList_item_author" : ".wr_index_page_mini_bookInfo_content_author";
+    const authorSelector = preview.full ? ".wr_bookList_item_author"
+      : preview.suggestion ? ".wr_suggestion_card_content_author" : ".wr_index_page_mini_bookInfo_content_author";
     const author = info?.author || preview.card.querySelector(authorSelector)?.textContent.trim();
     if (author) header.append(previewElement("div", "author", author));
     const publication = [details?.publisher, details?.published].filter(Boolean).join(" · ");
@@ -567,13 +604,15 @@
       text.textContent = paragraph.trim();
       body.append(text);
     }
-    previewContent.replaceChildren(titleRow, header, body);
+    const scrollContent = previewElement("div", "scroll-content");
+    scrollContent.append(header, body);
+    previewContent.replaceChildren(titleRow, scrollContent);
   }
 
   async function showPreview(preview) {
     if (!previewIsCurrent(preview)) return;
     const info = previewBooksByToken.get(preview.token);
-    if (!preview.full && !info) {
+    if (preview.compactSearch && !info) {
       preview.waitingForBook = true;
       return;
     }
@@ -854,7 +893,7 @@
   }, true);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && activePreview) closePreview();
+    if (event.key === "Escape" && (activePreview || previewOpenTimer !== undefined)) closePreview();
     const input = searchInput();
     if (event.target === input && event.key === "Enter" && !event.isComposing) {
       commitSearch(input.value);
@@ -910,7 +949,10 @@
       }
       return;
     }
-    if (hoveredPreview?.cover === preview.cover && hoveredPreview.url.href === preview.url.href) return;
+    if (hoveredPreview?.cover === preview.cover && hoveredPreview.url.href === preview.url.href) {
+      hoveredPreview.homePoint = preview.homePoint;
+      return;
+    }
     hoveredPreview = preview;
     startPreview(preview);
   }, { capture: true, passive: true });

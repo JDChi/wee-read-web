@@ -116,9 +116,10 @@
 
 .wr-helper-book-preview {
   --wr-helper-preview-paper: #fdfcf9;
+  --wr-helper-preview-glass: rgb(253 252 249 / 82%);
   --wr-helper-preview-ink: #242623;
   --wr-helper-preview-body: #3b3d37;
-  --wr-helper-preview-muted: #666960;
+  --wr-helper-preview-muted: #53594f;
   --wr-helper-preview-rule: #e5e3db;
   position: fixed;
   z-index: 10010;
@@ -155,6 +156,20 @@
   box-shadow: 0 12px 36px rgb(23 27 23 / 15%), 0 2px 6px rgb(23 27 23 / 5%);
 }
 
+@supports (backdrop-filter: blur(1px)) {
+  .wr-helper-book-preview-surface {
+    background: var(--wr-helper-preview-glass);
+    backdrop-filter: blur(18px) saturate(135%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .wr-helper-book-preview-surface {
+    background: var(--wr-helper-preview-paper);
+    backdrop-filter: none;
+  }
+}
+
 .wr-helper-book-preview-title-row {
   position: sticky;
   top: 0;
@@ -164,24 +179,26 @@
   background: var(--wr-helper-preview-paper);
 }
 
-.wr-helper-book-preview-title-row::after {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--wr-helper-preview-rule);
-  opacity: var(--wr-helper-preview-title-progress, 0);
-  pointer-events: none;
-  content: "";
+.wr-helper-book-preview-content {
+  --wr-helper-preview-title-inset: 10px;
+  padding: var(--wr-helper-preview-title-inset) 20px 20px;
 }
 
-.wr-helper-book-preview-content {
-  padding: 10px 20px 20px;
+@supports (mask-image: linear-gradient(transparent, black)) {
+  .wr-helper-book-preview-title-row {
+    background: transparent;
+  }
+
+  .wr-helper-book-preview-scroll-content {
+    --wr-helper-preview-fade-start: calc(var(--wr-helper-preview-scroll-top, 0px) - var(--wr-helper-preview-title-inset));
+    --wr-helper-preview-fade-length: clamp(0px, calc(2 * var(--wr-helper-preview-fade-start)), 18px);
+    mask-image: linear-gradient(transparent var(--wr-helper-preview-fade-start),
+      black calc(var(--wr-helper-preview-fade-start) + var(--wr-helper-preview-fade-length)));
+  }
 }
 
 .wr-helper-book-preview-header {
-  padding-bottom: 13px;
-  border-bottom: 1px solid var(--wr-helper-preview-rule);
+  padding-bottom: 14px;
 }
 
 .wr-helper-book-preview-title {
@@ -258,6 +275,7 @@
   }
   .wr-helper-book-preview {
     --wr-helper-preview-paper: #25282b;
+    --wr-helper-preview-glass: rgb(37 40 43 / 88%);
     --wr-helper-preview-ink: #f0f1ef;
     --wr-helper-preview-body: #d9dcd8;
     --wr-helper-preview-muted: #aeb4af;
