@@ -5,6 +5,7 @@
 }
 
 .wr-helper-history[hidden],
+.wr-helper-book-preview[hidden],
 .wr-helper-status[hidden] {
   display: none !important;
 }
@@ -113,6 +114,115 @@
   outline-offset: 2px;
 }
 
+.wr-helper-book-preview {
+  --wr-helper-preview-paper: #fdfcf9;
+  --wr-helper-preview-ink: #242623;
+  --wr-helper-preview-body: #3b3d37;
+  --wr-helper-preview-muted: #666960;
+  --wr-helper-preview-rule: #e5e3db;
+  position: fixed;
+  z-index: 10010;
+  width: min(392px, calc(100% - 16px));
+  color: var(--wr-helper-preview-ink);
+  font: 14px/1.7 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.wr-helper-book-preview-moving {
+  pointer-events: none;
+}
+
+.wr-helper-book-preview-shaping .wr-helper-book-preview-surface {
+  visibility: hidden;
+}
+
+.wr-helper-book-preview-genie {
+  position: fixed;
+  display: block;
+  pointer-events: none;
+}
+
+.wr-helper-book-preview-surface {
+  box-sizing: border-box;
+  max-height: min(416px, calc(100dvh - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  user-select: text;
+  color-scheme: light;
+  border: 1px solid var(--wr-helper-preview-rule);
+  border-radius: 16px;
+  background: var(--wr-helper-preview-paper);
+  box-shadow: 0 12px 36px rgb(23 27 23 / 15%), 0 2px 6px rgb(23 27 23 / 5%);
+}
+
+.wr-helper-book-preview-title-row {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-inline: -20px;
+  padding: 8px 20px;
+  background: var(--wr-helper-preview-paper);
+}
+
+.wr-helper-book-preview-title-row::after {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--wr-helper-preview-rule);
+  opacity: var(--wr-helper-preview-title-progress, 0);
+  pointer-events: none;
+  content: "";
+}
+
+.wr-helper-book-preview-content {
+  padding: 10px 20px 20px;
+}
+
+.wr-helper-book-preview-header {
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--wr-helper-preview-rule);
+}
+
+.wr-helper-book-preview-title {
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 600;
+  transform: scale(var(--wr-helper-preview-title-scale, 1));
+  transform-origin: left top;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wr-helper-book-preview-title {
+    transform: none;
+  }
+}
+
+.wr-helper-book-preview-author {
+  color: var(--wr-helper-preview-body);
+}
+
+.wr-helper-book-preview-publication {
+  margin-top: 2px;
+  color: var(--wr-helper-preview-muted);
+  font-size: 12px;
+}
+
+.wr-helper-book-preview-intro {
+  margin-top: 13px;
+  color: var(--wr-helper-preview-body);
+  cursor: text;
+  white-space: pre-line;
+}
+
+.wr-helper-book-preview-intro p {
+  margin: 0;
+}
+
+.wr-helper-book-preview-intro p + p {
+  margin-top: .75em;
+}
+
 .wr-helper-status {
   position: fixed;
   right: 24px;
@@ -145,5 +255,16 @@
   .wr-helper-add-button:hover {
     border-color: var(--wr-helper-blue-hover);
     background: var(--wr-helper-blue-hover);
+  }
+  .wr-helper-book-preview {
+    --wr-helper-preview-paper: #25282b;
+    --wr-helper-preview-ink: #f0f1ef;
+    --wr-helper-preview-body: #d9dcd8;
+    --wr-helper-preview-muted: #aeb4af;
+    --wr-helper-preview-rule: #404542;
+  }
+  .wr-helper-book-preview-surface {
+    color-scheme: dark;
+    box-shadow: 0 12px 36px rgb(0 0 0 / 32%);
   }
 }

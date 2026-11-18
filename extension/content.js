@@ -7,8 +7,18 @@
   const SEARCH_WRAPPER = ".wr_index_page_search_bar_wrapper";
   const SEARCH_REQUEST_PATH = "/api/store/search";
   const RESULT_CARD = ".wr_search_content_card_content_item";
+  const FULL_RESULT_CARD = ".search_bookDetail_list > .wr_bookList_item";
+  const PREVIEW_ID = "wr-helper-book-preview";
+  const PREVIEW_DELAY = 300;
+  const PREVIEW_CLOSE_DELAY = 180;
+  const PREVIEW_EXPAND_DURATION = 200;
+  const PREVIEW_COLLAPSE_DURATION = 160;
+  const PREVIEW_FADE_DURATION = 120;
 
   const booksByToken = new Map();
+  const previewBooksByToken = new Map();
+  const bookDetailsByUrl = new Map();
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const shelfByBookId = new Map();
   const pendingAdds = new Set();
   const observedSearchUrls = new Set();
@@ -25,6 +35,16 @@
   let shelfCheckRunning = false;
   let shelfCheckAgain = false;
   let statusMessage = null;
+  let previewPanel = null;
+  let previewSurface = null;
+  let previewContent = null;
+  let previewMotion = null;
+  let previewTextFade = null;
+  let activePreview = null;
+  let hoveredPreview = null;
+  let previewSelectionPointer = null;
+  let previewOpenTimer;
+  let previewCloseTimer;
 
   const normalizedTerm = (value) => String(value || "").trim();
 
@@ -59,7 +79,10 @@
     searchGeneration += 1;
     observedSearchUrls.clear();
     booksByToken.clear();
+    previewBooksByToken.clear();
     shelfByBookId.clear();
+    hoveredPreview = null;
+    closePreview();
     rememberSearch(keyword);
     hideHistory();
     scheduleRender();
@@ -193,16 +216,464 @@
     for (const section of response.results || []) {
       for (const entry of [...(section.books || []), ...(section.bookTexts || [])]) {
         const info = entry.bookInfo;
+        if (!info?.bookId) continue;
         const token = bookToken(info?.deepLink);
-        if (!token || !info?.bookId || info.soldout !== 0) continue;
+        const readerUrl = previewBookUrl(info.readerLink);
+        const previewToken = readerUrl?.pathname.split("/")[3] || token;
+        if (previewToken) {
+          const intro = typeof info.intro === "string" ? info.intro.trim() : "";
+          const previous = previewBooksByToken.get(previewToken);
+          previewBooksByToken.set(previewToken, {
+            title: normalizedTerm(info.title) || previous?.title,
+            author: normalizedTerm(info.author) || previous?.author,
+            intro: intro || previous?.intro,
+          });
+        }
+        if (!token || info.soldout !== 0) continue;
         booksByToken.set(token, {
           id: String(info.bookId),
           title: String(info.title || "这本书"),
         });
       }
     }
+    if (activePreview?.waitingForBook && previewBooksByToken.has(activePreview.token)) {
+      activePreview.waitingForBook = false;
+      void showPreview(activePreview);
+    }
     scheduleShelfCheck();
     scheduleRender();
+  }
+
+  function previewBookUrl(href) {
+    if (!href) return null;
+    try {
+      const url = new URL(href, location.origin);
+      if (url.origin === location.origin && /^\/web\/(reader|bookDetail)\/[\w-]+\/?$/.test(url.pathname)) {
+        return new URL(url.pathname.replace(/\/$/, ""), location.origin);
+      }
+    } catch {
+      // Skip cards whose book link cannot be identified.
+    }
+    return null;
+  }
+
+  function introductionText(node) {
+    const copy = node.cloneNode(true);
+    for (const br of copy.querySelectorAll("br")) br.replaceWith("\n");
+    return copy.textContent.trim();
+  }
+
+  function pointerOverRect(pointer, rect) {
+    return pointer.clientX >= rect.left && pointer.clientX < rect.right &&
+      pointer.clientY >= rect.top && pointer.clientY < rect.bottom;
+  }
+
+  function getPreviewTarget(element, pointer) {
+    const card = element.closest(`${RESULT_CARD}, ${FULL_RESULT_CARD}`);
+    if (!card) return null;
+    const full = card.matches(FULL_RESULT_CARD);
+    const link = card.querySelector(full ? ".wr_bookList_item_link" : ".wr_index_page_mini_bookInfo");
+    const cover = card.querySelector(full ? ".wr_bookList_item_cover" : ".wr_index_page_mini_bookInfo_cover_wrapper");
+    const url = previewBookUrl(link?.getAttribute("href"));
+    if (!cover || !url) return null;
+
+    if (pointer) {
+      // The full search card's link can overlay the cover as a sibling.
+      if (!cover.contains(element) && !link.contains(element)) return null;
+      if (!pointerOverRect(pointer, cover.getBoundingClientRect())) return null;
+    } else if (element !== link) {
+      return null;
+    }
+
+    const token = url.pathname.split("/")[3];
+    return { card, cover, link, url, token, full, hover: Boolean(pointer), page: location.href };
+  }
+
+  function fetchBookDetails(url) {
+    if (bookDetailsByUrl.has(url.href)) return bookDetailsByUrl.get(url.href);
+    const request = (async () => {
+      try {
+        const response = await fetch(url.href, {
+          credentials: "omit",
+          redirect: "error",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) return null;
+        const page = new DOMParser().parseFromString(await response.text(), "text/html");
+        const dialog = page.querySelector(".introDialog_content");
+        const paragraphs = dialog?.querySelectorAll(".introDialog_content_intro_para") || [];
+        const flyleaf = page.querySelector(".wr_flyleaf_page_bookIntro_content");
+        const intro = [...paragraphs].map(introductionText).filter(Boolean).join("\n\n") ||
+          (flyleaf ? introductionText(flyleaf) : "");
+        const publication = new Map();
+        for (const row of dialog?.querySelectorAll(".introDialog_content_pub_line") || []) {
+          const label = row.querySelector(".introDialog_content_pub_title");
+          const value = row.lastElementChild;
+          if (label && value && value !== label) {
+            publication.set(label.textContent.trim(), value.textContent.trim());
+          }
+        }
+        return { intro, publisher: publication.get("出版社"), published: publication.get("出版时间") };
+      } catch {
+        return null;
+      }
+    })().then((details) => {
+      if (!details?.intro && !details?.publisher && !details?.published) bookDetailsByUrl.delete(url.href);
+      return details;
+    });
+    bookDetailsByUrl.set(url.href, request);
+    return request;
+  }
+
+  function describePreview(visible) {
+    const link = activePreview?.link;
+    previewPanel?.setAttribute("aria-hidden", String(!visible));
+    if (!link) return;
+    const previous = (link.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+    const descriptions = previous.filter((id) => id !== PREVIEW_ID);
+    if (visible) descriptions.push(PREVIEW_ID);
+    if (descriptions.length) link.setAttribute("aria-describedby", descriptions.join(" "));
+    else if (previous.length) link.removeAttribute("aria-describedby");
+  }
+
+  function stopPreviewMotion() {
+    previewTextFade?.cancel();
+    previewTextFade = null;
+    if (!previewMotion) return;
+    const { frame, genie } = previewMotion;
+    previewMotion = null;
+    cancelAnimationFrame(frame);
+    genie?.canvas.remove();
+    previewSurface.style.opacity = "";
+    previewPanel.classList.remove("wr-helper-book-preview-moving", "wr-helper-book-preview-shaping");
+  }
+
+  function closePreview() {
+    clearTimeout(previewOpenTimer);
+    previewOpenTimer = undefined;
+    previewSelectionPointer = null;
+    cancelPreviewClose();
+    stopPreviewMotion();
+    if (previewPanel?.hidden === false) {
+      describePreview(false);
+      previewPanel.hidden = true;
+    }
+    activePreview = null;
+  }
+
+  function settlePreviewMotion() {
+    if (previewMotion?.closing) closePreview();
+    else stopPreviewMotion();
+  }
+
+  function createPreviewGenie(cover, panel) {
+    const right = panel.left - cover.right;
+    const left = cover.left - panel.right;
+    const below = panel.top - cover.bottom;
+    const above = cover.top - panel.bottom;
+    const horizontal = Math.max(right, left) >= 4;
+    const forward = horizontal ? right >= left : below >= above;
+    const gap = horizontal ? Math.max(right, left) : Math.max(below, above);
+    if (gap < 4 || !cover.width || !cover.height || !panel.width || !panel.height) return null;
+
+    const x = Math.max(0, Math.floor(Math.min(cover.left, panel.left)) - 2);
+    const y = Math.max(0, Math.floor(Math.min(cover.top, panel.top)) - 2);
+    const width = Math.min(document.documentElement.clientWidth, Math.ceil(Math.max(cover.right, panel.right)) + 2) - x;
+    const height = Math.min(document.documentElement.clientHeight, Math.ceil(Math.max(cover.bottom, panel.bottom)) + 2) - y;
+    if (width <= 0 || height <= 0) return null;
+    const canvas = previewElement("canvas", "genie");
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.ceil(width * ratio);
+    canvas.height = Math.ceil(height * ratio);
+    canvas.style.left = `${x}px`;
+    canvas.style.top = `${y}px`;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    canvas.setAttribute("aria-hidden", "true");
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+
+    // In local coordinates x runs from the cover toward the panel; y runs along the edges.
+    const center = horizontal ? cover.top + cover.height / 2 : cover.left + cover.width / 2;
+    const edge = horizontal ? (forward ? cover.right : cover.left) : (forward ? cover.bottom : cover.top);
+    const direction = forward ? ratio : -ratio;
+    context.setTransform(horizontal ? direction : 0, horizontal ? 0 : direction,
+      horizontal ? 0 : ratio, horizontal ? ratio : 0,
+      ((horizontal ? edge : center) - x) * ratio, ((horizontal ? center : edge) - y) * ratio);
+    const style = getComputedStyle(previewSurface);
+    context.fillStyle = style.backgroundColor;
+    context.strokeStyle = style.borderTopColor;
+    context.lineWidth = 1;
+    previewPanel.append(canvas);
+    return {
+      canvas, context, gap,
+      depth: horizontal ? panel.width : panel.height,
+      start: (horizontal ? panel.top : panel.left) - center,
+      end: (horizontal ? panel.bottom : panel.right) - center,
+      throat: Math.min((horizontal ? cover.height : cover.width) * 0.13,
+        (horizontal ? panel.height : panel.width) * 0.065),
+      radius: Number.parseFloat(style.borderTopLeftRadius) || 0,
+    };
+  }
+
+  function easePreview(progress) {
+    return progress * progress * (3 - 2 * progress);
+  }
+
+  function drawPreviewGenie(genie, progress) {
+    const { canvas, context, gap, depth, start, end, throat } = genie;
+    context.save();
+    context.resetTransform();
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.restore();
+
+    // The far edge leads while the near edge stays narrow and attached to the cover.
+    const far = easePreview(Math.min(progress / 0.86, 1));
+    const nearStart = 0.44;
+    const near = easePreview(Math.max(0, (progress - nearStart) / (1 - nearStart)));
+    const x1 = gap * near;
+    const x2 = (gap + depth) * far;
+    if (x2 - x1 < 1) return;
+    const top1 = -throat + (start + throat) * near;
+    const top2 = -throat + (start + throat) * far;
+    const bottom1 = throat + (end - throat) * near;
+    const bottom2 = throat + (end - throat) * far;
+    const radius = Math.min(genie.radius, (x2 - x1) / 3, (bottom1 - top1) / 2, (bottom2 - top2) / 2);
+    const inner1 = x1 + radius;
+    const inner2 = x2 - radius;
+    const control1 = inner1 + (inner2 - inner1) * 0.45;
+    const control2 = inner2 - (inner2 - inner1) * 0.45;
+
+    context.beginPath();
+    context.moveTo(x1, top1 + radius);
+    context.quadraticCurveTo(x1, top1, inner1, top1);
+    context.bezierCurveTo(control1, top1, control2, top2, inner2, top2);
+    context.quadraticCurveTo(x2, top2, x2, top2 + radius);
+    context.lineTo(x2, bottom2 - radius);
+    context.quadraticCurveTo(x2, bottom2, inner2, bottom2);
+    context.bezierCurveTo(control2, bottom2, control1, bottom1, inner1, bottom1);
+    context.quadraticCurveTo(x1, bottom1, x1, bottom1 - radius);
+    context.closePath();
+    context.fill();
+    context.stroke();
+  }
+
+  function stepPreviewMotion(now) {
+    if (!previewIsCurrent(activePreview)) return closePreview();
+    const motion = previewMotion;
+    const { closing, genie } = motion;
+    const duration = genie ? (closing ? PREVIEW_COLLAPSE_DURATION : PREVIEW_EXPAND_DURATION) : PREVIEW_FADE_DURATION;
+    const change = Math.max(0, now - motion.time) / duration;
+    motion.time = now;
+    motion.progress = Math.max(0, Math.min(1, motion.progress + (closing ? -change : change)));
+    if (motion.progress === (closing ? 0 : 1)) {
+      settlePreviewMotion();
+      if (genie && !closing && previewContent.animate) {
+        previewTextFade = previewContent.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 55 });
+      }
+      return;
+    }
+    if (genie) drawPreviewGenie(genie, motion.progress);
+    else previewSurface.style.opacity = String(easePreview(motion.progress));
+    motion.frame = requestAnimationFrame(stepPreviewMotion);
+  }
+
+  function playPreviewMotion(closing) {
+    if (!activePreview.hover || reducedMotion.matches) {
+      if (closing) closePreview();
+      else stopPreviewMotion();
+      return;
+    }
+    if (previewMotion) {
+      previewMotion.closing = closing;
+      previewMotion.time = performance.now();
+      return;
+    }
+    stopPreviewMotion();
+    const genie = createPreviewGenie(activePreview.cover.getBoundingClientRect(), previewPanel.getBoundingClientRect());
+    const progress = closing ? 1 : 0;
+    previewPanel.classList.add("wr-helper-book-preview-moving");
+    if (genie) {
+      previewPanel.classList.add("wr-helper-book-preview-shaping");
+      drawPreviewGenie(genie, progress);
+    } else {
+      previewSurface.style.opacity = String(progress);
+    }
+    previewMotion = { closing, genie, progress, time: performance.now(), frame: requestAnimationFrame(stepPreviewMotion) };
+  }
+
+  function previewIsCurrent(preview) {
+    return activePreview === preview && preview.page === location.href && preview.cover.isConnected &&
+      preview.link.isConnected && previewBookUrl(preview.link.getAttribute("href"))?.href === preview.url.href;
+  }
+
+  function positionPreview() {
+    if (!activePreview) return;
+    if (!previewIsCurrent(activePreview)) return closePreview();
+    if (previewPanel?.hidden !== false) return;
+    const cover = activePreview.cover.getBoundingClientRect();
+    const width = document.documentElement.clientWidth;
+    const height = document.documentElement.clientHeight;
+    if (cover.width <= 0 || cover.height <= 0 || cover.top >= height || cover.bottom <= 0 ||
+        cover.left >= width || cover.right <= 0) return closePreview();
+    const gap = 8;
+    const panelWidth = previewPanel.offsetWidth;
+    const panelHeight = previewPanel.offsetHeight;
+    const side = cover.right + gap + panelWidth <= width - gap ? cover.right + gap : cover.left - gap - panelWidth;
+    const stacked = side < gap;
+    const below = cover.bottom + gap + panelHeight <= height - gap;
+    const top = stacked ? (below ? cover.bottom + gap : cover.top - gap - panelHeight) : cover.top;
+    previewPanel.style.left = `${Math.max(gap, Math.min(width - panelWidth - gap, stacked ? cover.left : side))}px`;
+    previewPanel.style.top = `${Math.max(gap, Math.min(height - panelHeight - gap, top))}px`;
+  }
+
+  function previewTitle(preview, info) {
+    if (!preview.full && info?.title) return info.title;
+    const selector = preview.full ? ".wr_bookList_item_title" : ".wr_index_page_mini_bookInfo_content_title";
+    const title = preview.card.querySelector(selector)?.cloneNode(true);
+    title?.querySelector(".wr_index_page_mini_bookInfo_content_info_extra")?.remove();
+    return title?.textContent.trim() || info?.title || "书籍简介";
+  }
+
+  function previewElement(tag, part, text = "") {
+    const element = document.createElement(tag);
+    element.className = `wr-helper-book-preview-${part}`;
+    if (text) element.textContent = text;
+    return element;
+  }
+
+  function updatePreviewTitle(event) {
+    const titleRow = previewContent.firstElementChild;
+    if (!titleRow) return;
+    const progress = Math.max(0, Math.min(1, event.currentTarget.scrollTop / 32));
+    titleRow.style.setProperty("--wr-helper-preview-title-progress", progress);
+    titleRow.firstElementChild.style.setProperty("--wr-helper-preview-title-scale", 1 - 0.16 * progress);
+  }
+
+  function renderPreviewContent(preview, info, details, intro) {
+    const titleRow = previewElement("div", "title-row");
+    titleRow.append(previewElement("div", "title", previewTitle(preview, info)));
+    const header = previewElement("div", "header");
+    const authorSelector = preview.full ? ".wr_bookList_item_author" : ".wr_index_page_mini_bookInfo_content_author";
+    const author = info?.author || preview.card.querySelector(authorSelector)?.textContent.trim();
+    if (author) header.append(previewElement("div", "author", author));
+    const publication = [details?.publisher, details?.published].filter(Boolean).join(" · ");
+    if (publication) header.append(previewElement("div", "publication", publication));
+
+    const body = previewElement("div", "intro");
+    for (const paragraph of intro.split(/\n[ \t]*\n/)) {
+      if (!paragraph.trim()) continue;
+      const text = document.createElement("p");
+      text.textContent = paragraph.trim();
+      body.append(text);
+    }
+    previewContent.replaceChildren(titleRow, header, body);
+  }
+
+  async function showPreview(preview) {
+    if (!previewIsCurrent(preview)) return;
+    const info = previewBooksByToken.get(preview.token);
+    if (!preview.full && !info) {
+      preview.waitingForBook = true;
+      return;
+    }
+    const introNode = preview.full ? preview.card.querySelector(".wr_bookList_item_desc") : null;
+    const available = (introNode && introductionText(introNode)) || info?.intro;
+    if (!available && !preview.url.pathname.startsWith("/web/reader/")) return closePreview();
+    const details = await (available ? bookDetailsByUrl.get(preview.url.href) : fetchBookDetails(preview.url));
+    if (!previewIsCurrent(preview)) return;
+    const intro = available || details?.intro;
+    if (!intro) return closePreview();
+    if (!previewPanel?.isConnected) {
+      previewPanel = document.createElement("div");
+      previewPanel.id = PREVIEW_ID;
+      previewPanel.className = "wr-helper-book-preview";
+      previewPanel.setAttribute("role", "tooltip");
+      previewPanel.hidden = true;
+      previewPanel.addEventListener("pointerenter", cancelPreviewClose);
+      previewSurface = previewElement("div", "surface");
+      previewSurface.addEventListener("scroll", updatePreviewTitle, { passive: true });
+      previewSurface.addEventListener("pointerdown", (event) => {
+        if (event.pointerType !== "mouse" || event.button !== 0) return;
+        previewSelectionPointer = event.pointerId;
+        hoveredPreview = null;
+        cancelPreviewClose();
+      });
+      previewContent = previewElement("div", "content");
+      previewSurface.append(previewContent);
+      previewPanel.append(previewSurface);
+      document.body.append(previewPanel);
+    }
+    renderPreviewContent(preview, info, details, intro);
+    previewPanel.hidden = false;
+    previewSurface.scrollTop = 0;
+    positionPreview();
+    if (!previewIsCurrent(preview)) return;
+    describePreview(true);
+    playPreviewMotion(false);
+  }
+
+  function startPreview(preview) {
+    cancelPreviewClose();
+    if (activePreview?.cover === preview.cover && activePreview.url.href === preview.url.href &&
+        previewIsCurrent(activePreview)) {
+      if (!preview.hover) {
+        activePreview.hover = false;
+        if (previewOpenTimer !== undefined) {
+          clearTimeout(previewOpenTimer);
+          previewOpenTimer = undefined;
+          void showPreview(activePreview);
+        }
+      }
+      if (previewMotion?.closing) {
+        describePreview(true);
+        playPreviewMotion(false);
+      } else if (!preview.hover) {
+        stopPreviewMotion();
+      }
+      return;
+    }
+    closePreview();
+    activePreview = preview;
+    if (preview.hover) {
+      previewOpenTimer = setTimeout(() => {
+        previewOpenTimer = undefined;
+        void showPreview(preview);
+      }, PREVIEW_DELAY);
+    } else {
+      void showPreview(preview);
+    }
+  }
+
+  function cancelPreviewClose() {
+    clearTimeout(previewCloseTimer);
+    previewCloseTimer = undefined;
+  }
+
+  function previewSelectionInUse() {
+    if (previewSelectionPointer !== null) return true;
+    if (previewPanel?.hidden !== false) return false;
+    const selection = window.getSelection();
+    return Boolean(selection && !selection.isCollapsed && previewSurface.contains(selection.anchorNode));
+  }
+
+  function finishPreviewSelection() {
+    if (previewSelectionPointer === null) return;
+    previewSelectionPointer = null;
+    if (!previewPanel?.matches(":hover")) leavePreview();
+  }
+
+  function leavePreview() {
+    if (!activePreview || previewMotion?.closing || activePreview.link.matches(":focus-visible") ||
+        previewSelectionInUse()) return;
+    if (previewPanel?.hidden !== false) return closePreview();
+    previewCloseTimer ??= setTimeout(() => {
+      previewCloseTimer = undefined;
+      if (previewPanel.matches(":hover") || previewSelectionInUse()) return;
+      if (!previewIsCurrent(activePreview)) return closePreview();
+      describePreview(false);
+      playPreviewMotion(true);
+    }, PREVIEW_CLOSE_DELAY);
   }
 
   function handleSearchResource(resourceUrl) {
@@ -292,6 +763,7 @@
     requestAnimationFrame(() => {
       renderQueued = false;
       renderButtons();
+      positionPreview();
       if (historyPanel && !historyPanel.isConnected) historyPanel = null;
     });
   }
@@ -382,6 +854,7 @@
   }, true);
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && activePreview) closePreview();
     const input = searchInput();
     if (event.target === input && event.key === "Enter" && !event.isComposing) {
       commitSearch(input.value);
@@ -408,18 +881,71 @@
   document.addEventListener("focusin", (event) => {
     if (event.target === searchInput()) renderHistory();
     else if (!historyPanel?.contains(event.target)) hideHistory();
+    if (event.target.matches?.(":focus-visible")) {
+      const preview = getPreviewTarget(event.target);
+      if (preview) startPreview(preview);
+    }
   });
+  document.addEventListener("focusout", (event) => {
+    if (activePreview?.link === event.target && hoveredPreview?.cover !== activePreview.cover &&
+        !previewSelectionInUse()) closePreview();
+  });
+  document.addEventListener("pointermove", (event) => {
+    if (event.pointerType !== "mouse" || !(event.target instanceof Element)) return;
+    // A release outside the window may only be visible once the pointer returns.
+    if (previewSelectionPointer === event.pointerId && !(event.buttons & 1)) finishPreviewSelection();
+    if (previewPanel?.contains(event.target)) {
+      hoveredPreview = null;
+      cancelPreviewClose();
+      return;
+    }
+    if (previewSelectionInUse()) return;
+    const preview = getPreviewTarget(event.target, event);
+    if (!preview) {
+      hoveredPreview = null;
+      if (previewMotion && !previewMotion.closing && pointerOverRect(event, previewPanel.getBoundingClientRect())) {
+        cancelPreviewClose();
+      } else {
+        leavePreview();
+      }
+      return;
+    }
+    if (hoveredPreview?.cover === preview.cover && hoveredPreview.url.href === preview.url.href) return;
+    hoveredPreview = preview;
+    startPreview(preview);
+  }, { capture: true, passive: true });
+  document.addEventListener("pointerout", (event) => {
+    if (event.pointerType === "mouse" && !event.relatedTarget) {
+      hoveredPreview = null;
+      leavePreview();
+    }
+  }, { capture: true, passive: true });
   document.addEventListener("input", (event) => {
     if (event.target === searchInput()) renderHistory();
   });
   document.addEventListener("pointerdown", (event) => {
     if (event.target !== searchInput() && !historyPanel?.contains(event.target)) hideHistory();
+    if (!previewPanel?.contains(event.target)) closePreview();
   });
+  for (const eventName of ["pointerup", "pointercancel"]) {
+    document.addEventListener(eventName, (event) => {
+      if (event.pointerId === previewSelectionPointer) finishPreviewSelection();
+    }, true);
+  }
+  window.addEventListener("blur", finishPreviewSelection);
   window.addEventListener("resize", () => {
     positionHistoryPanel();
+    settlePreviewMotion();
     scheduleRender();
   });
   document.addEventListener("scroll", positionHistoryPanel, { capture: true, passive: true });
+  document.addEventListener("scroll", (event) => {
+    if (!previewPanel?.contains(event.target)) {
+      settlePreviewMotion();
+      positionPreview();
+    }
+  }, { capture: true, passive: true });
+  reducedMotion.addEventListener("change", settlePreviewMotion);
 
   historyLoad = chrome.storage.local.get(HISTORY_KEY).then((data) => {
     recentSearches = Array.isArray(data[HISTORY_KEY]) ? data[HISTORY_KEY].slice(0, HISTORY_LIMIT) : [];
@@ -452,6 +978,6 @@
     ensureHistoryPanel();
     scheduleRender();
   });
-  domObserver.observe(document.documentElement, { childList: true, subtree: true });
+  domObserver.observe(document.documentElement, { childList: true, subtree: true, attributeFilter: ["href"] });
   ensureHistoryPanel();
 })();
