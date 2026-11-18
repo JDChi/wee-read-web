@@ -116,12 +116,12 @@
 }
 
 .wr-helper-book-preview {
-  --wr-helper-preview-paper: #fdfcf9;
-  --wr-helper-preview-glass: rgb(253 252 249 / 82%);
+  --wr-helper-preview-paper: #fff;
+  --wr-helper-preview-glass: rgb(255 255 255 / 82%);
   --wr-helper-preview-ink: #242623;
   --wr-helper-preview-body: #3b3d37;
   --wr-helper-preview-muted: #53594f;
-  --wr-helper-preview-rule: #e5e3db;
+  --wr-helper-preview-rule: #e3e3e3;
   position: fixed;
   z-index: 10010;
   width: min(392px, calc(100% - 16px));

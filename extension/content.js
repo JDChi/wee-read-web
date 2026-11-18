@@ -698,7 +698,10 @@
     if (publication) header.append(previewElement("div", "publication", publication));
 
     const body = previewElement("div", "intro");
-    for (const paragraph of intro.split(/\n[ \t]*\n/)) {
+    // Some WeRead introductions flatten paragraph breaks to one space after Chinese sentence punctuation.
+    const formatted = intro.replace(/\r\n?/g, "\n")
+      .replace(/([。！？]) (?=\p{Script=Han})/gu, "$1\n\n");
+    for (const paragraph of formatted.split(/\n[^\S\n]*\n/)) {
       if (!paragraph.trim()) continue;
       const text = document.createElement("p");
       text.textContent = paragraph.trim();
