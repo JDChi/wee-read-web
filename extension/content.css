@@ -6,6 +6,7 @@
 
 .wr-helper-history[hidden],
 .wr-helper-book-preview[hidden],
+.wr-helper-book-preview-genie-text[hidden],
 .wr-helper-status[hidden] {
   display: none !important;
 }
@@ -133,7 +134,8 @@
   pointer-events: none;
 }
 
-.wr-helper-book-preview-shaping .wr-helper-book-preview-surface {
+/* Hide the original surface during the warp and keep its projected copies visible. */
+.wr-helper-book-preview-shaping > .wr-helper-book-preview-surface {
   visibility: hidden;
 }
 
@@ -141,6 +143,30 @@
   position: fixed;
   display: block;
   pointer-events: none;
+}
+
+.wr-helper-book-preview-genie-text {
+  position: fixed;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wr-helper-book-preview-genie-strip {
+  position: absolute;
+  inset: 0 auto auto 0;
+  overflow: hidden;
+  transform-origin: top left;
+}
+
+/* The Canvas draws the shell once, so each strip only contributes its share of the content. */
+.wr-helper-book-preview-genie-strip > .wr-helper-book-preview-surface {
+  position: absolute;
+  max-height: none;
+  overflow: hidden;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .wr-helper-book-preview-surface {

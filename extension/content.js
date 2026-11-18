@@ -41,7 +41,6 @@
   let previewSurface = null;
   let previewContent = null;
   let previewMotion = null;
-  let previewTextFade = null;
   let activePreview = null;
   let hoveredPreview = null;
   let previewSelectionPointer = null;
@@ -346,15 +345,13 @@
   }
 
   function stopPreviewMotion() {
-    previewTextFade?.cancel();
-    previewTextFade = null;
     if (!previewMotion) return;
     const { frame, genie } = previewMotion;
     previewMotion = null;
     cancelAnimationFrame(frame);
-    genie?.canvas.remove();
+    if (genie) removePreviewGenie(genie);
     previewSurface.style.opacity = "";
-    previewPanel.classList.remove("wr-helper-book-preview-moving", "wr-helper-book-preview-shaping");
+    previewPanel.classList.remove("wr-helper-book-preview-moving");
   }
 
   function closePreview() {
@@ -373,6 +370,47 @@
   function settlePreviewMotion() {
     if (previewMotion?.closing) closePreview();
     else stopPreviewMotion();
+  }
+
+  // The clipped DOM strips and projective mapping follow Raphael Salaja’s “The Genie Effect”.
+  // https://www.raphaelsalaja.com/work/genie#drawing-it-on-the-web
+  // Here the strips follow our Canvas Bézier outline, with a fixed cap on DOM copies.
+  function createPreviewGenieStrips(canvas, panel, horizontal, style) {
+    const layer = previewElement("div", "genie-text");
+    layer.style.cssText = canvas.style.cssText;
+    layer.setAttribute("aria-hidden", "true");
+    layer.inert = true;
+    const depth = horizontal ? panel.width : panel.height;
+    const across = horizontal ? panel.height : panel.width;
+    const count = Math.min(16, Math.ceil(depth / 24));
+    // Account for the hidden scrollbar so the copies preserve text wrapping and scroll position.
+    const scrollbarWidth = previewSurface.offsetWidth - previewSurface.clientWidth -
+      Number.parseFloat(style.borderLeftWidth) - Number.parseFloat(style.borderRightWidth);
+    const contentWidth = panel.width - Math.max(0, scrollbarWidth);
+    const scrollTop = previewSurface.scrollTop;
+    const strips = [];
+    for (let index = 0; index < count; index += 1) {
+      // A subpixel overlap keeps the antialiased edges of adjacent strips from leaving seams.
+      const from = Math.max(0, depth * index / count - 0.35);
+      const to = Math.min(depth, depth * (index + 1) / count + 0.35);
+      const element = previewElement("div", "genie-strip");
+      element.style.width = `${horizontal ? to - from : across}px`;
+      element.style.height = `${horizontal ? across : to - from}px`;
+      const copy = previewSurface.cloneNode(true);
+      copy.style.left = `${horizontal ? -from : 0}px`;
+      copy.style.top = `${horizontal ? 0 : -from}px`;
+      copy.style.width = `${contentWidth}px`;
+      copy.style.height = `${panel.height}px`;
+      copy.style.removeProperty("opacity");
+      element.append(copy);
+      layer.append(element);
+      strips.push({ element, copy, from, to });
+    }
+    previewPanel.append(canvas, layer);
+    if (scrollTop) {
+      for (const { copy } of strips) copy.scrollTop = scrollTop;
+    }
+    return { layer, strips, depth, across };
   }
 
   function createPreviewGenie(cover, panel) {
@@ -405,18 +443,19 @@
     // In local coordinates x runs from the cover toward the panel; y runs along the edges.
     const center = horizontal ? cover.top + cover.height / 2 : cover.left + cover.width / 2;
     const edge = horizontal ? (forward ? cover.right : cover.left) : (forward ? cover.bottom : cover.top);
-    const direction = forward ? ratio : -ratio;
-    context.setTransform(horizontal ? direction : 0, horizontal ? 0 : direction,
+    const direction = forward ? 1 : -1;
+    const depthOrigin = edge - (horizontal ? x : y);
+    const crossOrigin = center - (horizontal ? y : x);
+    context.setTransform(horizontal ? direction * ratio : 0, horizontal ? 0 : direction * ratio,
       horizontal ? 0 : ratio, horizontal ? ratio : 0,
-      ((horizontal ? edge : center) - x) * ratio, ((horizontal ? center : edge) - y) * ratio);
+      (horizontal ? depthOrigin : crossOrigin) * ratio, (horizontal ? crossOrigin : depthOrigin) * ratio);
     const style = getComputedStyle(previewSurface);
     context.fillStyle = style.backgroundColor;
     context.strokeStyle = style.borderTopColor;
     context.lineWidth = 1;
-    previewPanel.append(canvas);
     return {
-      canvas, context, gap,
-      depth: horizontal ? panel.width : panel.height,
+      ...createPreviewGenieStrips(canvas, panel, horizontal, style),
+      canvas, context, gap, horizontal, direction, depthOrigin, crossOrigin,
       start: (horizontal ? panel.top : panel.left) - center,
       end: (horizontal ? panel.bottom : panel.right) - center,
       throat: Math.min((horizontal ? cover.height : cover.width) * 0.13,
@@ -427,6 +466,54 @@
 
   function easePreview(progress) {
     return progress * progress * (3 - 2 * progress);
+  }
+
+  function previewGenieSection(frame, fraction) {
+    const { x1, x2, inner1, inner2, top1, top2, bottom1, bottom2 } = frame;
+    const x = x1 + (x2 - x1) * fraction;
+    if (x <= inner1) return { x, top: top1, bottom: bottom1 };
+    if (x >= inner2) return { x, top: top2, bottom: bottom2 };
+
+    // Invert the x component by bisection, using the same control points as drawPreviewGenie.
+    const target = (x - inner1) / (inner2 - inner1);
+    let low = 0;
+    let high = 1;
+    for (let step = 0; step < 12; step += 1) {
+      const t = (low + high) / 2;
+      const u = 1 - t;
+      const depth = 3 * u * t * (0.45 * u + 0.55 * t) + t * t * t;
+      if (depth < target) low = t;
+      else high = t;
+    }
+    const mix = easePreview((low + high) / 2);
+    return { x, top: top1 + (top2 - top1) * mix, bottom: bottom1 + (bottom2 - bottom1) * mix };
+  }
+
+  function projectPreviewGenieStrips(genie, frame) {
+    const { strips, horizontal, direction, depthOrigin, crossOrigin, depth, across } = genie;
+    for (const { element, from, to } of strips) {
+      // Strip order follows the screen axes. Sample the outline in reverse for leftward and upward warps.
+      const first = previewGenieSection(frame, direction > 0 ? from / depth : 1 - from / depth);
+      const last = previewGenieSection(frame, direction > 0 ? to / depth : 1 - to / depth);
+      const span = first.bottom - first.top;
+      const ratio = span / (last.bottom - last.top);
+      if (span <= 0 || ratio <= 0 || !Number.isFinite(ratio)) return false;
+
+      // Parallel sides make perspective depend on depth alone. The divisor w goes from 1
+      // at the first edge to span / lastSpan at the last, giving each edge its own scale.
+      const length = to - from;
+      const alongStart = depthOrigin + direction * first.x;
+      const acrossStart = crossOrigin + first.top;
+      const along = (ratio * (depthOrigin + direction * last.x) - alongStart) / length;
+      const shear = (ratio * (crossOrigin + last.top) - acrossStart) / length;
+      const scale = span / across;
+      const perspective = (ratio - 1) / length;
+      const matrix = horizontal
+        ? [along, shear, 0, perspective, 0, scale, 0, 0, 0, 0, 1, 0, alongStart, acrossStart, 0, 1]
+        : [scale, 0, 0, 0, shear, along, 0, perspective, 0, 0, 1, 0, acrossStart, alongStart, 0, 1];
+      element.style.transform = `matrix3d(${matrix.join(",")})`;
+    }
+    return true;
   }
 
   function drawPreviewGenie(genie, progress) {
@@ -442,7 +529,8 @@
     const near = easePreview(Math.max(0, (progress - nearStart) / (1 - nearStart)));
     const x1 = gap * near;
     const x2 = (gap + depth) * far;
-    if (x2 - x1 < 1) return;
+    genie.layer.hidden = x2 - x1 < 1;
+    if (genie.layer.hidden) return true;
     const top1 = -throat + (start + throat) * near;
     const top2 = -throat + (start + throat) * far;
     const bottom1 = throat + (end - throat) * near;
@@ -465,11 +553,29 @@
     context.closePath();
     context.fill();
     context.stroke();
+    return projectPreviewGenieStrips(genie, { x1, x2, inner1, inner2, top1, top2, bottom1, bottom2 });
+  }
+
+  function removePreviewGenie(genie) {
+    // Restore the original surface so scrolling, selection, and backdrop blur can resume.
+    genie.canvas.remove();
+    genie.layer.remove();
+    previewPanel.classList.remove("wr-helper-book-preview-shaping");
+  }
+
+  function paintPreviewMotion(motion) {
+    if (motion.genie) {
+      if (drawPreviewGenie(motion.genie, motion.progress)) return;
+      removePreviewGenie(motion.genie);
+      motion.genie = null;
+    }
+    previewSurface.style.opacity = String(easePreview(motion.progress));
   }
 
   function stepPreviewMotion(now) {
-    if (!previewIsCurrent(activePreview)) return closePreview();
     const motion = previewMotion;
+    if (!motion) return;
+    if (!activePreview || !previewIsCurrent(activePreview)) return closePreview();
     const { closing, genie } = motion;
     const duration = genie ? (closing ? PREVIEW_COLLAPSE_DURATION : PREVIEW_EXPAND_DURATION) : PREVIEW_FADE_DURATION;
     const change = Math.max(0, now - motion.time) / duration;
@@ -477,13 +583,9 @@
     motion.progress = Math.max(0, Math.min(1, motion.progress + (closing ? -change : change)));
     if (motion.progress === (closing ? 0 : 1)) {
       settlePreviewMotion();
-      if (genie && !closing && previewContent.animate) {
-        previewTextFade = previewContent.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 55 });
-      }
       return;
     }
-    if (genie) drawPreviewGenie(genie, motion.progress);
-    else previewSurface.style.opacity = String(easePreview(motion.progress));
+    paintPreviewMotion(motion);
     motion.frame = requestAnimationFrame(stepPreviewMotion);
   }
 
@@ -494,6 +596,7 @@
       return;
     }
     if (previewMotion) {
+      // Keep the current geometry and progress when the pointer reverses the animation.
       previewMotion.closing = closing;
       previewMotion.time = performance.now();
       return;
@@ -502,13 +605,10 @@
     const genie = createPreviewGenie(activePreview.cover.getBoundingClientRect(), previewPanel.getBoundingClientRect());
     const progress = closing ? 1 : 0;
     previewPanel.classList.add("wr-helper-book-preview-moving");
-    if (genie) {
-      previewPanel.classList.add("wr-helper-book-preview-shaping");
-      drawPreviewGenie(genie, progress);
-    } else {
-      previewSurface.style.opacity = String(progress);
-    }
-    previewMotion = { closing, genie, progress, time: performance.now(), frame: requestAnimationFrame(stepPreviewMotion) };
+    if (genie) previewPanel.classList.add("wr-helper-book-preview-shaping");
+    previewMotion = { closing, genie, progress, time: performance.now(), frame: null };
+    paintPreviewMotion(previewMotion);
+    previewMotion.frame = requestAnimationFrame(stepPreviewMotion);
   }
 
   function previewIsCurrent(preview) {

@@ -80,6 +80,8 @@
 
 项目使用原生 JavaScript、CSS 和 Chrome Manifest V3，无需安装依赖。加载 `extension/` 目录即可开发；修改代码后，刷新扩展及微信读书页面。
 
+简介浮层的神灯动画用 Canvas 绘制贝塞尔轮廓，标题和正文沿轮廓分片投影。DOM 裁切与 `matrix3d` 投影参考 Raphael Salaja 的网页演示。 [The Genie Effect · Drawing It on the Web](https://www.raphaelsalaja.com/work/genie#drawing-it-on-the-web)
+
 ```sh
 sh scripts/package.sh
 ```
