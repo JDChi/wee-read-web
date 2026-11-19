@@ -33,6 +33,6 @@ sh -n scripts/package.sh
 
 仅在发布任务中更新 [manifest](extension/manifest.json) 版本。创建 tag 前完成以下准备。
 
-1. 优先复用 `dist/<上一版本号>/` 的材料。缺少本地副本时参考上个发布 tag，无历史材料时从仓库现有文档开始。保留已有更新，按本版变化调整 `README.md` 和 `AGENTS.md`，在 `store/LISTING.md` 准备商店短描述及详细描述。
+1. 优先复用 `dist/<上一版本号>/` 的材料。缺少本地副本时参考上个发布 tag，无历史材料时从仓库现有文档开始。保留已有更新，按本版变化调整 `README.md` 和 `AGENTS.md`，在 `store/LISTING.md` 准备商店文案，并与 manifest 的名称和短描述对齐。
 2. 验证后运行 `sh scripts/package.sh`（需 `python3` 和 `zip`）。核对 `dist/<版本号>/` 中的 `wee-read-web-<版本号>.zip`、`README.md`、`AGENTS.md`、`LISTING.md`，确认 ZIP 内的 manifest 版本及文档副本与本版一致。源码或文档变更后重新打包，`dist/` 产物留在本地。
 3. 在包含本版源码和发布文档的提交上创建 `v<版本号>` tag，版本须与 manifest 一致。获得发布授权后推送 tag，GitHub Actions 会自动创建公开 Release。
