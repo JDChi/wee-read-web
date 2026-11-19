@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "微小读",
-  "version": "0.2.1",
-  "description": "在网页右键搜索微信读书，支持封面简介预览、最近搜索和快捷加入书架。",
+  "version": "0.3.0",
+  "description": "选中书名，右键即可在微信读书搜书。支持封面简介预览、最近搜索和快捷加入书架。",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
