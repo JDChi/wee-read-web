@@ -34,4 +34,12 @@
 
 </details>
 
+## 请我喝杯咖啡 ☕
+
+如果微小读帮到了你，欢迎请我喝杯咖啡。
+
+| 支付宝 | 微信支付 |
+| :---: | :---: |
+| <img src="docs/images/alipay.jpg" alt="支付宝收款码" width="220"> | <img src="docs/images/wechatpay.jpg" alt="微信收款码" width="220"> |
+
 [隐私政策](PRIVACY.md) · [更新记录](https://github.com/JDChi/wee-read-web/releases)
