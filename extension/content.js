@@ -695,13 +695,22 @@
     return element;
   }
 
-  function updatePreviewTitle(event) {
-    const titleRow = previewContent.firstElementChild;
-    if (!titleRow) return;
-    const scrollTop = Math.max(0, event.currentTarget.scrollTop);
+  function updatePreviewScroll() {
+    const titleRow = previewContent?.firstElementChild;
+    const scrollContent = titleRow?.nextElementSibling;
+    if (!scrollContent || previewPanel.hidden) return;
+    const scrollTop = Math.max(0, previewSurface.scrollTop);
+    const remaining = previewSurface.scrollHeight - previewSurface.clientHeight - scrollTop;
+    let bottomStops = "";
+    if (remaining > 1) {
+      const edge = previewSurface.getBoundingClientRect().top + previewSurface.clientTop +
+        previewSurface.clientHeight - scrollContent.getBoundingClientRect().top;
+      bottomStops = `black ${edge - Math.min(36, 2 * remaining)}px, transparent ${edge}px`;
+    }
     const progress = Math.min(1, scrollTop / 32);
     titleRow.firstElementChild.style.setProperty("--wr-helper-preview-title-scale", 1 - 0.16 * progress);
-    titleRow.nextElementSibling.style.setProperty("--wr-helper-preview-scroll-top", `${scrollTop}px`);
+    scrollContent.style.setProperty("--wr-helper-preview-scroll-top", `${scrollTop}px`);
+    scrollContent.style.setProperty("--wr-helper-preview-bottom-stops", bottomStops);
   }
 
   function renderPreviewContent(preview, info, details, intro) {
@@ -752,7 +761,7 @@
       previewPanel.hidden = true;
       previewPanel.addEventListener("pointerenter", cancelPreviewClose);
       previewSurface = previewElement("div", "surface");
-      previewSurface.addEventListener("scroll", updatePreviewTitle, { passive: true });
+      previewSurface.addEventListener("scroll", updatePreviewScroll, { passive: true });
       previewSurface.addEventListener("pointerdown", (event) => {
         if (event.pointerType !== "mouse" || event.button !== 0) return;
         previewSelectionPointer = event.pointerId;
@@ -769,6 +778,7 @@
     previewSurface.scrollTop = 0;
     positionPreview();
     if (!previewIsCurrent(preview)) return;
+    updatePreviewScroll();
     describePreview(true);
     playPreviewMotion(false);
   }
@@ -1098,6 +1108,7 @@
   window.addEventListener("resize", () => {
     positionHistoryPanel();
     settlePreviewMotion();
+    updatePreviewScroll();
     scheduleRender();
   });
   document.addEventListener("scroll", positionHistoryPanel, { capture: true, passive: true });
