@@ -110,9 +110,105 @@
 }
 
 .wr-helper-history button:focus-visible,
-.wr-helper-add-button:focus-visible {
+.wr-helper-add-button:focus-visible,
+.wr-helper-reader-return:focus-visible {
   outline: 2px solid var(--wr-helper-blue);
   outline-offset: 2px;
+}
+
+.renderTarget_pager .renderTarget_pager_content_right:has(> .wr-helper-reader-return) {
+  flex-direction: row;
+}
+
+.renderTarget_pager_content_right > .wr-helper-reader-return {
+  flex-shrink: 0;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.renderTarget_pager_content_right > .wr-helper-reader-return ~ .renderTarget_pager_indicator {
+  order: -1;
+}
+
+.wr-helper-reader-return:disabled {
+  cursor: wait;
+}
+
+.readerControls > .wr-helper-reader-return:not(.readerControls_item) {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--wr-helper-blue-strong);
+  color: #fff;
+  font: 600 14px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+  white-space: nowrap;
+}
+
+.readerControls > .wr-helper-reader-return:not(.readerControls_item):enabled {
+  cursor: pointer;
+}
+
+.readerControls > .wr-helper-reader-return:not(.readerControls_item):enabled:hover {
+  background: var(--wr-helper-blue-hover);
+}
+
+.readerControls > .wr-helper-reader-return:not(.readerControls_item) > .renderTarget_pager_icon {
+  display: none;
+}
+
+.readerControls > .wr-helper-reader-return-above:not(.readerControls_item) {
+  top: auto;
+  bottom: calc(100% + 10px);
+}
+
+.readerControls > .wr-helper-reader-return.readerControls_item {
+  --wr-helper-return-icon: #8c8c8e;
+  --wr-helper-return-icon-hover: #f0f0f2;
+  --wr-helper-return-tooltip-color: #8a8c90;
+  position: relative;
+  flex: none;
+  margin-bottom: 24px;
+}
+
+body.wr_whiteTheme .readerControls > .wr-helper-reader-return.readerControls_item {
+  --wr-helper-return-icon: #858c96;
+  --wr-helper-return-icon-hover: #212832;
+  --wr-helper-return-tooltip-color: #858c96;
+}
+
+.readerControls > .wr-helper-reader-return.readerControls_item > .renderTarget_pager_icon {
+  width: 22px;
+  height: 22px;
+  margin: auto;
+  background: var(--wr-helper-return-icon);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6 3.5 2.5 7 6 10.5M3 7h6.5a3 3 0 1 1 0 6H8' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.readerControls > .wr-helper-reader-return.readerControls_item:enabled:is(:hover, :focus-visible) > .renderTarget_pager_icon {
+  background-color: var(--wr-helper-return-icon-hover);
+}
+
+.readerControls > .wr-helper-reader-return.readerControls_item > .wr-helper-reader-return-tooltip {
+  position: absolute;
+  z-index: 1000;
+  top: 50%;
+  left: calc(100% + 6px);
+  transform: translateY(-50%);
+  visibility: hidden;
+  pointer-events: none;
+  color: var(--wr-helper-return-tooltip-color);
+  font: 12px/15px "PingFang SC", -apple-system, "SF UI Text", "Lucida Grande", STheiti, "Microsoft YaHei", sans-serif;
+  white-space: nowrap;
+}
+
+.readerControls > .wr-helper-reader-return.readerControls_item:is(:hover, :focus-visible) > .wr-helper-reader-return-tooltip {
+  visibility: visible;
+  transition: visibility 0s linear 200ms;
 }
 
 .wr-helper-book-preview {

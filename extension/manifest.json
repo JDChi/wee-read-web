@@ -15,6 +15,12 @@
   },
   "content_scripts": [
     {
+      "matches": ["https://weread.qq.com/web/reader/*"],
+      "js": ["reader-return.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
       "matches": ["https://weread.qq.com/*"],
       "js": ["content.js"],
       "css": ["content.css"],
