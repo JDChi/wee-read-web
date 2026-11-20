@@ -84,26 +84,32 @@
 .wr-helper-add-button {
   position: absolute;
   z-index: 2;
+  transform: translateY(-50%);
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  min-height: 24px;
-  padding: 2px 8px;
-  border: 1px solid var(--wr-helper-blue-strong);
-  border-radius: 999px;
-  background: var(--wr-helper-blue-strong);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-  white-space: nowrap;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(13 20 30 / 4%);
+  color: #74808e;
 }
 
-.wr-helper-add-button:hover {
-  border-color: var(--wr-helper-blue-hover);
-  background: var(--wr-helper-blue-hover);
+.wr-helper-add-button::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8M8 4v8' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.wr-helper-add-button:enabled:is(:hover, :focus-visible) {
+  background: rgb(13 20 30 / 8%);
+  color: #212832;
 }
 
 .wr-helper-add-button:disabled {
@@ -407,13 +413,12 @@ body.wr_whiteTheme .readerControls > .wr-helper-reader-return.readerControls_ite
 
 @media (prefers-color-scheme: dark) {
   .wr-helper-add-button {
-    border-color: var(--wr-helper-blue-strong);
-    background: var(--wr-helper-blue-strong);
-    color: #fff;
+    background: rgb(255 255 255 / 8%);
+    color: #aeb9c6;
   }
-  .wr-helper-add-button:hover {
-    border-color: var(--wr-helper-blue-hover);
-    background: var(--wr-helper-blue-hover);
+  .wr-helper-add-button:enabled:is(:hover, :focus-visible) {
+    background: rgb(255 255 255 / 14%);
+    color: #f0f0f2;
   }
   .wr-helper-book-preview {
     --wr-helper-preview-paper: #25282b;

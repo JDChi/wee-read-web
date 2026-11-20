@@ -931,8 +931,8 @@
   function alignAddButton(card, metric, button) {
     const cardRect = card.getBoundingClientRect();
     const metricRect = metric.getBoundingClientRect();
-    button.style.top = `${Math.round(metricRect.bottom - cardRect.top + 10)}px`;
-    button.style.right = `${Math.max(0, Math.round(cardRect.right - metricRect.right))}px`;
+    button.style.top = `${Math.round(metricRect.top - cardRect.top + metricRect.height / 2)}px`;
+    button.style.right = `${Math.round(cardRect.right - metricRect.left + 8)}px`;
   }
 
   function renderButtons() {
@@ -953,9 +953,7 @@
         if (existing.parentElement !== card) card.append(existing);
         card.classList.add("wr-helper-card");
         const isPending = pendingAdds.has(book.id);
-        const label = isPending ? "加入中…" : "加入书架";
         if (existing.disabled !== isPending) existing.disabled = isPending;
-        if (existing.textContent !== label) existing.textContent = label;
         alignAddButton(card, metric, existing);
         continue;
       }
@@ -964,7 +962,8 @@
       button.type = "button";
       button.className = "wr-helper-add-button";
       button.dataset.bookId = book.id;
-      button.textContent = "加入书架";
+      button.disabled = pendingAdds.has(book.id);
+      button.title = "加入书架";
       button.setAttribute("aria-label", `将《${book.title}》加入书架`);
       button.addEventListener("click", (event) => {
         event.preventDefault();
