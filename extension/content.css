@@ -2,6 +2,7 @@
   --wr-helper-blue: #1b88ee;
   --wr-helper-blue-strong: #0d72d2;
   --wr-helper-blue-hover: #096ac2;
+  --wr-helper-light-glass: rgb(255 255 255 / 82%);
 }
 
 .wr-helper-history[hidden],
@@ -19,6 +20,7 @@
   border: 1px solid #e5e8ec;
   border-radius: 26px;
   background: #fff;
+  color-scheme: light;
   box-shadow: 0 12px 32px rgb(22 29 37 / 12%);
   color: #2b3139;
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -213,7 +215,7 @@ body.wr_whiteTheme .readerControls > .wr-helper-reader-return.readerControls_ite
 
 .wr-helper-book-preview {
   --wr-helper-preview-paper: #fff;
-  --wr-helper-preview-glass: rgb(255 255 255 / 82%);
+  --wr-helper-preview-glass: var(--wr-helper-light-glass);
   --wr-helper-preview-ink: #242623;
   --wr-helper-preview-body: #3b3d37;
   --wr-helper-preview-muted: #53594f;
@@ -279,13 +281,26 @@ body.wr_whiteTheme .readerControls > .wr-helper-reader-return.readerControls_ite
 }
 
 @supports (backdrop-filter: blur(1px)) {
+  .wr-helper-history,
+  .wr-helper-book-preview-surface {
+    backdrop-filter: blur(18px) saturate(135%);
+  }
+
+  .wr-helper-history {
+    background: var(--wr-helper-light-glass);
+  }
+
   .wr-helper-book-preview-surface {
     background: var(--wr-helper-preview-glass);
-    backdrop-filter: blur(18px) saturate(135%);
   }
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .wr-helper-history {
+    background: #fff;
+    backdrop-filter: none;
+  }
+
   .wr-helper-book-preview-surface {
     background: var(--wr-helper-preview-paper);
     backdrop-filter: none;
@@ -377,15 +392,6 @@ body.wr_whiteTheme .readerControls > .wr-helper-reader-return.readerControls_ite
 }
 
 @media (prefers-color-scheme: dark) {
-  .wr-helper-history {
-    border-color: #3e454c;
-    background: #262b30;
-    color: #f3f5f6;
-  }
-  .wr-helper-history-heading { border-color: #3e454c; }
-  .wr-helper-history-clear { color: #68b5ff; }
-  .wr-helper-history-clear:hover,
-  .wr-helper-history-item:hover { background: #333b42; }
   .wr-helper-add-button {
     border-color: var(--wr-helper-blue-strong);
     background: var(--wr-helper-blue-strong);
