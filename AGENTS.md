@@ -15,6 +15,7 @@
 - 书籍可读且确认未加入书架时才显示「加入书架」，状态未知时隐藏。由用户点击触发同源书架操作，防止重复提交。成功后隐藏同书入口，失败时提示并允许重试。
 - 预览优先用已有简介，缺少时按需请求同源公开阅读页，使用 `credentials: "omit"`，仅在当前页面缓存。渲染前确认触发对象仍有效，并保留简介原有段落和换行。
 - 「回到刚才」仅在目录跨章跳转成功后出现。返回点只存在当前阅读页内存中，成功返回、离开本书，或从最近的跳转落点净向前读 3 页或 3 屏且前台累计停留 45 秒后清除。原生阅读器接口不可用时，保留原站跳转与阅读。
+- 「全书剩余」使用原生阅读器按当前正文位置计算的全书进度。进度无效时隐藏，百分比只在当前页使用；显示开关保存在浏览器的扩展本地存储中。
 - 禁止读取、保存或输出登录凭证，禁止经开发者服务器中转或上报用户数据。修改权限、域名、存储或数据流时，同步检查 [隐私政策](PRIVACY.md)、[README](README.md) 和[商店说明](store/LISTING.md)。
 
 ## 验证
@@ -25,6 +26,7 @@
 node --check extension/background.js
 node --check extension/content.js
 node --check extension/reader-return.js
+node --check extension/options.js
 python3 -m json.tool extension/manifest.json > /dev/null
 sh -n scripts/package.sh
 ```

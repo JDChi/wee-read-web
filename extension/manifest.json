@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "微小读 · 微信读书网页版助手",
   "short_name": "微小读",
-  "version": "0.3.1",
-  "description": "微信读书网页版的非官方扩展。选中书名即可右键搜书，还支持最近搜索、封面简介预览和快捷加入书架。",
+  "version": "0.4.0",
+  "description": "微信读书网页版的非官方扩展。支持右键搜书、封面简介预览、快捷加入书架、跳章后回到刚才和全书剩余进度。",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
