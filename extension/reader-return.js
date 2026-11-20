@@ -4,7 +4,6 @@
   const READER_PATH = /^\/web\/reader\/[\w-]+\/?$/;
   const CATALOG_ITEM = ".readerCatalog_list > .readerCatalog_list_item";
   const BUTTON_CLASS = "wr-helper-reader-return";
-  const BUTTON_ABOVE_CLASS = "wr-helper-reader-return-above";
   const PAGER_BUTTON_CLASS = "renderTarget_pager_button";
   const TOOLBAR_BUTTON_CLASS = "readerControls_item";
   const NEXT_PAGE_BUTTON = ".renderTarget_pager_content_right > .renderTarget_pager_button_right";
@@ -24,6 +23,78 @@
   let readingProgress = null;
   let pageTurn = null;
   let dismissalTimer;
+  let showRemaining = false;
+  let remainingLabel = null;
+  let remainingTimer;
+
+  function clearRemaining() {
+    clearTimeout(remainingTimer);
+    remainingTimer = undefined;
+    remainingLabel?.remove();
+    remainingLabel = null;
+  }
+
+  function readWholeBookProgress(instance) {
+    if (!instance?.bookId || !isReadablePage(instance) || instance.isNeedPay ||
+        instance.isPDFBookType || !instance.isShowRenderTarget || !instance.$refs?.renderTargetContainer ||
+        !Number.isFinite(instance.currentChapter?.wordCount) || !instance.chapterInfos?.length) return null;
+
+    // The native calculation can fall back to the stored progress when
+    // layout or word counts are missing. Only display a current position.
+    if (typeof instance.handleNavigateNext === "function") {
+      if (!instance.chapterInfos.some((chapter) => chapter.wordCount > 0) ||
+          !instance.getCurrentChapterPages?.()?.length) return null;
+    } else if (!(instance.bookInfo?.totalWords > 0)) {
+      return null;
+    }
+
+    const { progress, offset } = instance.computeProgressData({
+      computeSummary: false,
+      computeProgress: true
+    }) || {};
+    return Number.isInteger(progress) && progress >= 0 && progress <= 100 &&
+      Number.isSafeInteger(offset) && offset >= 0 ? progress : null;
+  }
+
+  function updateRemaining() {
+    remainingTimer = undefined;
+    if (!showRemaining) return;
+    let progress;
+    try {
+      progress = readWholeBookProgress(reader);
+    } catch {
+      // If the reader changes its data shape, leave its own progress alone.
+    }
+    const topBar = reader?.$el?.querySelector?.(".readerTopBar_inner");
+    const actions = topBar?.querySelector(".readerTopBar_right");
+    if (progress == null || !actions || actions.parentElement !== topBar) {
+      clearRemaining();
+      return;
+    }
+    if (!remainingLabel) {
+      remainingLabel = document.createElement("div");
+      remainingLabel.className = "wr-helper-reading-remaining";
+    }
+    if (typeof reader.handleNavigateNext === "function") {
+      if (remainingLabel.nextElementSibling !== actions) actions.before(remainingLabel);
+    } else if (actions.firstElementChild !== remainingLabel) {
+      actions.prepend(remainingLabel);
+    }
+    const text = `全书剩余 ${100 - progress}%`;
+    if (remainingLabel.textContent !== text) remainingLabel.textContent = text;
+  }
+
+  function scheduleRemaining() {
+    if (showRemaining && reader && remainingTimer === undefined) {
+      remainingTimer = setTimeout(updateRemaining, 100);
+    }
+  }
+
+  document.addEventListener("wr-helper-reading-progress-setting", (event) => {
+    showRemaining = event.detail === true;
+    if (showRemaining) scheduleRemaining();
+    else clearRemaining();
+  });
 
   function clearReturnPoint() {
     clearTimeout(dismissalTimer);
@@ -219,10 +290,15 @@
   function showReturnButton() {
     if (!returnPoint) return;
     const root = reader?.$el;
-    const next = root?.querySelector?.(NEXT_PAGE_BUTTON);
-    const paged = next && next.getClientRects().length > 0;
-    const controls = paged ? next.parentElement : root?.querySelector?.(".readerControls");
-    if (!controls) return;
+    const paged = typeof reader?.handleNavigateNext === "function";
+    const next = paged ? root?.querySelector?.(NEXT_PAGE_BUTTON) : null;
+    const controls = paged
+      ? (next?.getClientRects().length ? next.parentElement : null)
+      : root?.querySelector?.(".readerControls");
+    if (!controls) {
+      returnButton?.remove();
+      return;
+    }
     if (!returnButton) {
       returnButton = document.createElement("button");
       returnButton.type = "button";
@@ -238,7 +314,7 @@
 
     if (paged) {
       if (returnButton.nextElementSibling === next) return;
-      returnButton.classList.remove(BUTTON_ABOVE_CLASS, TOOLBAR_BUTTON_CLASS);
+      returnButton.classList.remove(TOOLBAR_BUTTON_CLASS);
       returnButton.classList.add(PAGER_BUTTON_CLASS);
       setReturnLabel(returnButton, returnButton.lastElementChild.textContent);
       // Match the native pager's Vue-scoped styles in the current reader.
@@ -251,22 +327,12 @@
       return;
     }
 
-    if (returnButton.parentElement !== controls) {
-      const scrolling = !controls.querySelector(".readerControls_item.isHorizontalReader");
-      returnButton.classList.remove(PAGER_BUTTON_CLASS, BUTTON_ABOVE_CLASS);
-      returnButton.classList.toggle(TOOLBAR_BUTTON_CLASS, scrolling);
+    if (controls.firstElementChild !== returnButton) {
+      returnButton.classList.remove(PAGER_BUTTON_CLASS);
+      returnButton.classList.add(TOOLBAR_BUTTON_CLASS);
       setReturnLabel(returnButton, returnButton.lastElementChild.textContent);
-      if (scrolling) controls.prepend(returnButton);
-      else controls.append(returnButton);
+      controls.prepend(returnButton);
     }
-    if (!returnButton.classList.contains(TOOLBAR_BUTTON_CLASS)) positionReturnButton();
-  }
-
-  function positionReturnButton() {
-    const controls = returnButton?.parentElement;
-    if (!controls) return;
-    const bottom = controls.getBoundingClientRect().bottom + 10 + returnButton.offsetHeight;
-    returnButton.classList.toggle(BUTTON_ABOVE_CLASS, bottom > window.innerHeight);
   }
 
   document.addEventListener("click", (event) => {
@@ -294,12 +360,20 @@
       clickOrigin = null;
     }
   }, true);
-  window.addEventListener("pagehide", clearReturnPoint);
+  window.addEventListener("pagehide", () => {
+    clearReturnPoint();
+    clearRemaining();
+  });
+  window.addEventListener("pageshow", scheduleRemaining);
   window.addEventListener("resize", () => {
     sampleScroll(false);
     showReturnButton();
+    scheduleRemaining();
   });
-  window.addEventListener("scroll", () => sampleScroll(true), { passive: true });
+  window.addEventListener("scroll", () => {
+    sampleScroll(true);
+    scheduleRemaining();
+  }, { passive: true });
   for (const [target, event] of [[document, "visibilitychange"], [window, "focus"], [window, "blur"]]) {
     target.addEventListener(event, () => {
       sampleScroll(false);
@@ -395,19 +469,29 @@
     addHook("mounted", function () {
       stopWatchingLoader();
       clearReturnPoint();
+      clearRemaining();
       reader = this;
-      this.$watch("bookId", () => { if (reader === this) clearReturnPoint(); });
+      scheduleRemaining();
+      this.$watch("bookId", () => {
+        if (reader !== this) return;
+        clearReturnPoint();
+        clearRemaining();
+        scheduleRemaining();
+      });
       this.$watch("isReaderCatalogShowing", () => {
         if (reader === this) sampleScroll(false);
       });
     });
     addHook("updated", function () {
-      if (reader === this) showReturnButton();
+      if (reader !== this) return;
+      showReturnButton();
+      scheduleRemaining();
     });
     addHook("beforeDestroy", function () {
       if (reader !== this) return;
       reader = null;
       clearReturnPoint();
+      clearRemaining();
     });
   }
 

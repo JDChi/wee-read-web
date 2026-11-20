@@ -136,36 +136,50 @@
   cursor: wait;
 }
 
-.readerControls > .wr-helper-reader-return:not(.readerControls_item) {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  box-sizing: border-box;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--wr-helper-blue-strong);
-  color: #fff;
-  font: 600 14px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+body.wr_page_reader .readerTopBar .readerTopBar_inner:has(> .wr-helper-reading-remaining) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+}
+
+.readerTopBar .readerTopBar_inner:has(.wr-helper-reading-remaining) > .readerTopBar_left {
+  min-width: 0;
+}
+
+.readerTopBar .readerTopBar_inner:has(.wr-helper-reading-remaining) .readerTopBar_title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.readerControls > .wr-helper-reader-return:not(.readerControls_item):enabled {
-  cursor: pointer;
+.readerTopBar .readerTopBar_inner:has(> .wr-helper-reading-remaining) > .readerTopBar_right {
+  justify-self: end;
 }
 
-.readerControls > .wr-helper-reader-return:not(.readerControls_item):enabled:hover {
-  background: var(--wr-helper-blue-hover);
+.readerTopBar_right:has(> .wr-helper-reading-remaining) {
+  flex-shrink: 0;
 }
 
-.readerControls > .wr-helper-reader-return:not(.readerControls_item) > .renderTarget_pager_icon {
-  display: none;
+.readerTopBar_right > .wr-helper-reading-remaining {
+  margin-inline-end: 8px;
 }
 
-.readerControls > .wr-helper-reader-return-above:not(.readerControls_item) {
-  top: auto;
-  bottom: calc(100% + 10px);
+.wr-helper-reading-remaining {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #262628;
+  color: #b6b7bb;
+  font: 12px/18px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+body.wr_whiteTheme .wr-helper-reading-remaining {
+  background: #f4f5f7;
+  color: #58616e;
 }
 
 .readerControls > .wr-helper-reader-return.readerControls_item {

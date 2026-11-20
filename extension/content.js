@@ -2,6 +2,7 @@
   "use strict";
 
   const HISTORY_KEY = "recentSearches";
+  const READING_PROGRESS_KEY = "showReadingProgress";
   const HISTORY_LIMIT = 5;
   const SEARCH_INPUT = '.wr_index_page_search_bar_input[type="search"]';
   const SEARCH_WRAPPER = ".wr_index_page_search_bar_wrapper";
@@ -48,6 +49,23 @@
   let previewCloseTimer;
 
   const normalizedTerm = (value) => String(value || "").trim();
+
+  if (/^\/web\/reader\/[\w-]+\/?$/.test(location.pathname)) {
+    let settingChanged = false;
+    const setProgressDisplay = (value) => {
+      document.dispatchEvent(new CustomEvent("wr-helper-reading-progress-setting", {
+        detail: value !== false,
+      }));
+    };
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local" || !changes[READING_PROGRESS_KEY]) return;
+      settingChanged = true;
+      setProgressDisplay(changes[READING_PROGRESS_KEY].newValue);
+    });
+    chrome.storage.local.get(READING_PROGRESS_KEY).then((data) => {
+      if (!settingChanged) setProgressDisplay(data[READING_PROGRESS_KEY]);
+    }).catch(() => {});
+  }
 
   function searchInput() {
     return document.querySelector(SEARCH_INPUT);
