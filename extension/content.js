@@ -1,9 +1,18 @@
 (() => {
   "use strict";
 
+  const config = globalThis[Symbol.for("wr-helper-content-config")];
+  if (!config) return;
+  const {
+    historyLimit: HISTORY_LIMIT,
+    previewOpenDelayMs: PREVIEW_DELAY,
+    previewCloseDelayMs: PREVIEW_CLOSE_DELAY,
+    previewExpandDurationMs: PREVIEW_EXPAND_DURATION,
+    previewCollapseDurationMs: PREVIEW_COLLAPSE_DURATION,
+    previewFadeDurationMs: PREVIEW_FADE_DURATION,
+  } = config;
+
   const HISTORY_KEY = "recentSearches";
-  const READING_PROGRESS_KEY = "showReadingProgress";
-  const HISTORY_LIMIT = 5;
   const SEARCH_INPUT = '.wr_index_page_search_bar_input[type="search"]';
   const SEARCH_WRAPPER = ".wr_index_page_search_bar_wrapper";
   const SEARCH_REQUEST_PATH = "/api/store/search";
@@ -12,11 +21,6 @@
   const HOME_SUGGESTION = ".wr_index_page_top_section_content_suggestions > a.wr_suggestion_card_wrapper";
   const HOME_RANK_BOOK = ".wr_index_page_rank_list_card_content_info > a.wr_index_page_mini_bookInfo";
   const PREVIEW_ID = "wr-helper-book-preview";
-  const PREVIEW_DELAY = 300;
-  const PREVIEW_CLOSE_DELAY = 180;
-  const PREVIEW_EXPAND_DURATION = 200;
-  const PREVIEW_COLLAPSE_DURATION = 160;
-  const PREVIEW_FADE_DURATION = 120;
 
   const booksByToken = new Map();
   const previewBooksByToken = new Map();
@@ -49,23 +53,6 @@
   let previewCloseTimer;
 
   const normalizedTerm = (value) => String(value || "").trim();
-
-  if (/^\/web\/reader\/[\w-]+\/?$/.test(location.pathname)) {
-    let settingChanged = false;
-    const setProgressDisplay = (value) => {
-      document.dispatchEvent(new CustomEvent("wr-helper-reading-progress-setting", {
-        detail: value !== false,
-      }));
-    };
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== "local" || !changes[READING_PROGRESS_KEY]) return;
-      settingChanged = true;
-      setProgressDisplay(changes[READING_PROGRESS_KEY].newValue);
-    });
-    chrome.storage.local.get(READING_PROGRESS_KEY).then((data) => {
-      if (!settingChanged) setProgressDisplay(data[READING_PROGRESS_KEY]);
-    }).catch(() => {});
-  }
 
   function searchInput() {
     return document.querySelector(SEARCH_INPUT);
@@ -859,6 +846,7 @@
     if (!activeKeyword) activeKeyword = normalizedTerm(searchInput()?.value);
     if (keyword !== activeKeyword || observedSearchUrls.has(url.href)) return;
     observedSearchUrls.add(url.href);
+    // A late response from the first A is stale even after A → B → A.
     const generation = searchGeneration;
     fetch(url.href, { credentials: "same-origin" })
       .then((response) => {

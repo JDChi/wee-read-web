@@ -26,8 +26,13 @@
     },
     {
       "matches": ["https://weread.qq.com/*"],
-      "js": ["content.js"],
+      "js": ["content-config.js", "content.js"],
       "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://weread.qq.com/web/reader/*"],
+      "js": ["reader-settings.js"],
       "run_at": "document_idle"
     }
   ]

@@ -389,6 +389,7 @@
       const changesChapter = target?.chapterUid && target.chapterUid !== currentChapterUid(this);
       clickOrigin = null;
       if (point) catalogOrigin = null;
+      // An async chapter load owns this page turn's count so the pager cannot count it again.
       if (turn && changesChapter) turn.loadsChapter = true;
       const result = nativeChangeChapter.apply(this, arguments);
       if (!changesChapter || typeof result?.then !== "function") return result;
