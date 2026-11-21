@@ -388,6 +388,7 @@ body.wr_whiteTheme .readerControls > .wr-helper-reader-return.readerControls_ite
 
 .wr-helper-book-preview-intro p {
   margin: 0;
+  text-align: justify;
 }
 
 .wr-helper-book-preview-intro p + p {
