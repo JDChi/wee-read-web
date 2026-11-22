@@ -19,6 +19,30 @@
 - 「全书剩余」使用原生阅读器按当前正文位置计算的全书进度。进度无效时隐藏，百分比只在当前页使用；显示开关保存在浏览器的扩展本地存储中。
 - 禁止读取、保存或输出登录凭证，禁止经开发者服务器中转或上报用户数据。修改权限、域名、存储或数据流时，同步检查 [隐私政策](PRIVACY.md)、[README](README.md) 和[商店说明](store/LISTING.md)。
 
+## 加密笔记维护
+
+- 仓库保存 [加密笔记](docs/notes.md.enc)。把可编辑的 Markdown 放在仓库外的私有目录，口令保存在本机密码管理器中。
+- 从仓库根目录执行下列命令，把示例明文路径换成自己的文件。按 OpenSSL 的提示输入口令，用同一套参数更新密文与解密查看。
+
+```sh
+note="$HOME/private-notes/notes.md"
+/usr/bin/openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -salt \
+  -in "$note" -out docs/notes.md.enc
+
+/usr/bin/openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 \
+  -in docs/notes.md.enc | less
+```
+
+- 提交前，在 macOS 终端运行下列命令。比对通过时只显示通过提示，明文经管道交给 `cmp`。随后用 `git diff --cached --name-only` 核对暂存清单。
+
+```sh
+(
+  set -o pipefail
+  /usr/bin/openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 \
+    -in docs/notes.md.enc | cmp -s "$note" - && printf '%s\n' '解密校验通过'
+)
+```
+
 ## 验证
 
 按改动范围执行静态检查。
