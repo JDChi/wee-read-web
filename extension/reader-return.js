@@ -13,6 +13,7 @@
   const installed = Symbol.for("wr-helper-reader-return");
   if (!READER_PATH.test(location.pathname) || window[installed]) return;
   window[installed] = true;
+  const connectTheme = globalThis[Symbol.for("wr-helper-reader-theme-connect")];
 
   let reader = null;
   let catalogOrigin = null;
@@ -365,6 +366,19 @@
     clearRemaining();
   });
   window.addEventListener("pageshow", scheduleRemaining);
+  document.addEventListener("wr-helper-reader-theme-redraw", (event) => {
+    if (!reader?.isShowRenderTarget || typeof reader.clearDrawTexts !== "function") return;
+    try {
+      const repaint = reader.triggerRepaint ?? reader.drawSomeTexts;
+      if (typeof repaint !== "function") return;
+      reader.clearDrawTexts();
+      Promise.resolve(repaint.call(reader)).catch(() => {});
+      // A synthetic resize would put the double-page reader into pre-render.
+      event.preventDefault();
+    } catch {
+      // The site's native rendering remains available if these methods change.
+    }
+  });
   window.addEventListener("resize", () => {
     sampleScroll(false);
     showReturnButton();
@@ -472,6 +486,7 @@
       clearReturnPoint();
       clearRemaining();
       reader = this;
+      document.dispatchEvent(new Event("wr-helper-reader-ready"));
       scheduleRemaining();
       this.$watch("bookId", () => {
         if (reader !== this) return;
@@ -511,7 +526,7 @@
       if (typeof factory !== "function" || wrappedFactories.has(factory)) continue;
       const source = Function.prototype.toString.call(factory);
       if (!source.includes("computeProgressData") || !source.includes("renderTargetContainer")) continue;
-      const wrapper = function (module) {
+      const wrapper = function (module, _exports, runtime) {
         const result = factory.apply(this, arguments);
         try {
           const options = module.exports?.default;
@@ -520,6 +535,7 @@
               typeof methods.scrollTo === "function" && !connectedOptions.has(options)) {
             connectReader(options);
             connectedOptions.add(options);
+            connectTheme?.(runtime);
           }
         } catch {
           // Keep the original module usable if its component shape changes.

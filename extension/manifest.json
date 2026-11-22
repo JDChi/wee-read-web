@@ -17,10 +17,22 @@
     "page": "options.html",
     "open_in_tab": true
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/reader-paper-texture.png"],
+      "matches": ["https://weread.qq.com/*"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": ["https://weread.qq.com/web/reader/*"],
-      "js": ["reader-return.js"],
+      "js": ["reader-theme-config.js", "reader-theme.js"],
+      "css": ["reader-theme.css"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://weread.qq.com/web/reader/*"],
+      "js": ["reader-theme-renderer.js", "reader-return.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },
